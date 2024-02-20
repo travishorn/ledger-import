@@ -1,11 +1,15 @@
+#!/usr/bin/env node
+
 import { readFile } from 'node:fs/promises';
 import { program } from 'commander';
 import { DateTime } from 'luxon';
 import Papa from 'papaparse';
+import { parseCurrencyString, parseAmount, plainText } from './lib.js';
 
 async function main(txFilePath, rulesFilePath) {
   const txString = await readFile(txFilePath, 'utf-8');
   const rules = JSON.parse(await readFile(rulesFilePath, 'utf-8'));
+  const timeZone = rules.timeZone ?? 'utc';
 
   function transformHeader(_, i) {
     return rules.fields[i];
@@ -21,17 +25,47 @@ async function main(txFilePath, rulesFilePath) {
     throw new Error(JSON.stringify(parsed.errors));
   }
 
-  // TODO: Use luxon to parse the date string so we can later output as an ISO
-  // date.
+  const transformed = parsed.data
+    .map((tx) => {
+      const output = {
+        date: DateTime.fromFormat(tx.date, rules.dateFormat, { zone: timeZone }).toISODate(),
+        description: tx.description,
+        amount: parseAmount(tx, rules.locale, rules.currency)
+      };
 
-  // TODO: Create a schema for encoding conditional tx parsing in the JSON rules
-  // file.
+      if (tx.balance) {
+        output.balance = parseCurrencyString(tx.balance, rules.locale, rules.currency)
+      }
 
-  // TODO: Based on the tx data and the rules, build a string by looping through
-  // transactions and appending ledger-structured transactions.
+      return output;
+    })
+    .map((tx) => {
+      const output = {
+        ...tx,
+        account1: rules.account1,
+        account2: rules.account2
+      };
 
-  console.log(rules);
-  console.log(parsed);
+      rules.txRules.forEach((rule) => {
+        const descriptionPattern = new RegExp(rule.pattern, 'g');
+        const match = tx.description.match(descriptionPattern);
+
+        if (match) {
+          if (rule.payee) output.payee = rule.payee;
+          if (rule.comment) output.comment = rule.comment;
+          if (rule.account1) output.account1 = rule.account1;
+          if (rule.account2) output.account2 = rule.account2;
+        }
+      });
+
+      return output;
+    });
+
+  const pt = transformed.reduce((prev, curr) => {
+    return prev + plainText(curr, rules.locale, rules.currency);
+  }, '');
+
+  console.log(pt);
 }
 
 program
