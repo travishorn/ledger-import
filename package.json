@@ -18,9 +18,10 @@
     "hooks": {
       "pre-commit": "npm run lint"
     }
-  },  
+  },
   "dependencies": {
     "commander": "^12.0.0",
+    "json-logic-js": "^2.0.2",
     "luxon": "^3.4.4",
     "papaparse": "^5.4.1"
   },

@@ -4,8 +4,13 @@ import { readFile, appendFile, writeFile } from "node:fs/promises";
 import { parse as pathParse, join } from "node:path";
 import { program } from "commander";
 import { DateTime } from "luxon";
+import jsonLogic from "json-logic-js";
 import Papa from "papaparse";
 import { parseCurrencyString, parseAmount, plainText } from "./lib.js";
+
+jsonLogic.add_operation("contains", (subject, pattern) => {
+  return new RegExp(pattern).test(subject);
+});
 
 async function main(txFilePath, rulesFilePath, journalFilePath) {
   // Read the transactions from CSV file (provided by financial institution)
@@ -94,28 +99,19 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
     .map((tx) => {
       // Set the payee equal to the description (for now) and set the accounts
       // to the default defined in the rules
-      const output = {
+      let output = {
         ...tx,
         payee: tx.description,
         account1: rules.account1,
         account2: rules.account2,
       };
 
-      // Loop through the transaction rules in the rules file
-      rules.txRules.forEach((rule) => {
-        // Create a regular expression from the pattern string
-        const descriptionPattern = new RegExp(rule.pattern, "g");
-
-        // Look for a matching pattern in the current transaction's description
-        const match = tx.description.match(descriptionPattern);
-
-        // If the description matches the pattern, set the payee, comment, and
-        // accounts according to the rule
-        if (match) {
-          if (rule.payee) output.payee = rule.payee;
-          if (rule.comment) output.comment = rule.comment;
-          if (rule.account1) output.account1 = rule.account1;
-          if (rule.account2) output.account2 = rule.account2;
+      // Loop through the transaction transformers in the rules file
+      rules.transformers.forEach((transformer) => {
+        // If the tranformer's rule matches...
+        if (jsonLogic.apply(transformer.rule, tx)) {
+          // Merge the transformer's new values with the output
+          output = Object.assign(output, transformer.newValues);
         }
       });
 
