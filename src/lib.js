@@ -72,5 +72,5 @@ export function plainText(tx, locale, currency) {
   const account2 = tx.account2;
   const account2Amount = currencyString(tx.amount, locale, currency);
 
-  return `${date} ${payee}${comment}\n    ${account1.padEnd(49)}${account1Amount.padStart(12)}${balance}\n    ${account2.padEnd(49)}${account2Amount.padStart(12)}\n`;
+  return `${date} * ${payee}${comment}\n    ${account1.padEnd(49)}${account1Amount.padStart(12)}${balance}\n    ${account2.padEnd(49)}${account2Amount.padStart(12)}\n`;
 }
