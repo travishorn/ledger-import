@@ -50,58 +50,27 @@ export function parseAmount(tx, locale, currency) {
   return 0;
 }
 
+// Try to parse an amount using `toLocaleString`. If it fails, just return the
+// number with the currency symbol after it.
+function currencyString(amount, locale, currency) {
+  try {
+    return amount.toLocaleString(locale, { style: 'currency', currency });
+  } catch (error) {
+    return `${amount} ${currency}`;
+  }
+}
+
 // Takes a transaction object and returns it as a plaintext string used by
 // hledger.
 export function plainText(tx, locale, currency) {
-  // Attempt to line up amounts using spaces. The end of each account string
-  // will be padded with spaces
-  const accountPadLen = Math.max(43, tx.account1.length, tx.account2.length);
+  const date = tx.date;
+  const payee = tx.payee;
+  const comment = tx.comment ? `  ; ${tx.comment}` : '';
+  const account1 = tx.account1;
+  const account1Amount = currencyString(-tx.amount, locale, currency);
+  const balance = tx.balance ? ` = ${currencyString(tx.balance, locale, currency).padStart(12)}` : '';
+  const account2 = tx.account2;
+  const account2Amount = currencyString(tx.amount, locale, currency);
 
-  // Format the amount in the given locale/currency
-  const account1Amount = (-tx.amount).toLocaleString(locale, {
-    style: "currency",
-    currency,
-  });
-
-  // Format the matching amount (double entry bookkeeping means theres always
-  // an opposite amount taken/given from two accounts)
-  const account2Amount = tx.amount.toLocaleString(locale, {
-    style: "currency",
-    currency,
-  });
-
-  // Attend to line up the amounts using spaces
-  const amountPadLen = Math.max(account1Amount.length, account2Amount.length);
-
-  // Format the balance amount
-  const balanceAmount = tx.balance?.toLocaleString(locale, {
-    style: "currency",
-    currency,
-  });
-
-  // Start this transaction's string with the date and payee
-  let output = `${tx.date} ${tx.payee}`;
-
-  // If there's a comment, append it
-  if (tx.comment) {
-    output += `  ; ${tx.comment}\n`;
-  } else {
-    output += "\n";
-  }
-
-  // Append the first account and its amount
-  output += `    ${tx.account1.padEnd(accountPadLen)} ${account1Amount.padStart(amountPadLen).padEnd(11)}`;
-
-  // If there's a balance, append it
-  if (tx.balance) {
-    output += `= ${balanceAmount.padStart(11)}\n`;
-  } else {
-    output += "\n";
-  }
-
-  // Append the second account and its amount, followed by two newlines so the
-  // string/file is ready for another transaction
-  output += `    ${tx.account2.padEnd(accountPadLen)} ${account2Amount.padStart(amountPadLen)}\n\n`;
-
-  return output;
+  return `${date} ${payee}${comment}\n    ${account1.padEnd(49)}${account1Amount.padStart(12)}${balance}\n    ${account2.padEnd(49)}${account2Amount.padStart(12)}\n`;
 }
