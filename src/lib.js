@@ -32,8 +32,20 @@ export function parseCurrencyString(string, locale, currency) {
 // Takes a transaction, a locale, and a currency. Returns the transaction amount
 // as a number.
 export function parseAmount(tx, locale, currency) {
-  // If there's an `amount` field, just return the amount in that.
-  if (tx.amount) return parseCurrencyString(tx.amount, locale, currency);
+  // If there's an `amount` field, parse it
+  if (tx.amount) {
+    // Check if the amount starts with a +/- sign followed by a space
+    const amountStr = tx.amount.trim();
+    if (amountStr.startsWith("+") || amountStr.startsWith("-")) {
+      // Extract the sign and the amount part (skip the first 2 characters: sign + space)
+      const sign = amountStr.startsWith("+") ? -1 : 1;
+      const amountPart = amountStr.substring(2); // Skip the "+ " or "- " prefix
+      return sign * parseCurrencyString(amountPart, locale, currency);
+    } else {
+      // Fallback to original parsing if no +/- prefix
+      return parseCurrencyString(tx.amount, locale, currency);
+    }
+  }
 
   // However, some institutions use separate columns for "amount in" and
   // "amount out". If this transaction has something in the `amount-in` field,
@@ -54,7 +66,7 @@ export function parseAmount(tx, locale, currency) {
 // number with the currency symbol after it.
 function currencyString(amount, locale, currency) {
   try {
-    return amount.toLocaleString(locale, { style: 'currency', currency });
+    return amount.toLocaleString(locale, { style: "currency", currency });
   } catch (error) {
     return `${amount} ${currency}`;
   }
@@ -65,10 +77,12 @@ function currencyString(amount, locale, currency) {
 export function plainText(tx, locale, currency) {
   const date = tx.date;
   const payee = tx.payee;
-  const comment = tx.comment ? `  ; ${tx.comment}` : '';
+  const comment = tx.comment ? `  ; ${tx.comment}` : "";
   const account1 = tx.account1;
   const account1Amount = currencyString(-tx.amount, locale, currency);
-  const balance = tx.balance ? ` = ${currencyString(tx.balance, locale, currency).padStart(12)}` : '';
+  const balance = tx.balance
+    ? ` = ${currencyString(tx.balance, locale, currency).padStart(12)}`
+    : "";
   const account2 = tx.account2;
   const account2Amount = currencyString(tx.amount, locale, currency);
 

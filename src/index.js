@@ -72,7 +72,12 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
   const toBeImported =
     latestTxIndex >= 0 ? reversed.slice(latestTxIndex + 1) : reversed;
 
-  const transformed = toBeImported
+  // Filter out transactions with "PENDING" dates
+  const filteredTransactions = toBeImported.filter(
+    (tx) => tx.date !== "PENDING",
+  );
+
+  const transformed = filteredTransactions
     .map((tx) => {
       // Transform the date into an ISO date, trim the description, and parse
       // the amount into a number
@@ -130,10 +135,13 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
     await appendFile(journalFilePath, plaintextTransactions);
 
     // and store the latest transaction that was just imported
-    await writeFile(
-      latestFilePath,
-      JSON.stringify(parsed.data[parsed.data.length - 1]),
-    );
+    // Use the last transaction from the filtered list (excluding PENDING)
+    if (filteredTransactions.length > 0) {
+      await writeFile(
+        latestFilePath,
+        JSON.stringify(filteredTransactions[filteredTransactions.length - 1]),
+      );
+    }
   } else {
     // If no journal file was specified, just show the plaintext transactions
     console.log(plaintextTransactions);
