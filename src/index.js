@@ -53,7 +53,7 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
   // purpose is to store the most recently imported transaction
   const latestFilePath = join(
     rulesFileParts.dir,
-    `${rulesFileParts.name}.latest`,
+    `${rulesFileParts.name}.latest`
   );
 
   // Get the latest imported transaction, if it exists.
@@ -64,7 +64,7 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
 
   // Find that same transaction in the CSV transaction file
   const latestTxIndex = reversed.findIndex(
-    (tx) => JSON.stringify(tx) === latestTx,
+    (tx) => JSON.stringify(tx) === latestTx
   );
 
   // Remove any transactions that are on or before that latest transaction.
@@ -80,36 +80,52 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
     return !tx.date.trim().toUpperCase().startsWith("PENDING");
   });
 
-  const transformed = filteredTransactions
-    .map((tx) => {
+  // Transform transactions and filter out those with unparseable dates.
+  // Keep track of original transactions that successfully transform.
+  const transformedWithOriginals = filteredTransactions
+    .map((originalTx) => {
+      // Try to parse the date
+      const parsedDate = DateTime.fromFormat(
+        originalTx.date,
+        rules.dateFormat,
+        {
+          zone: timeZone,
+        }
+      );
+      const isoDate = parsedDate.toISODate();
+
+      // If the date couldn't be parsed, return null to filter it out
+      if (!isoDate) {
+        return null;
+      }
+
       // Transform the date into an ISO date, trim the description, and parse
       // the amount into a number
-      const output = {
-        date: DateTime.fromFormat(tx.date, rules.dateFormat, {
-          zone: timeZone,
-        }).toISODate(),
-        description: tx.description.trim(),
-        amount: parseAmount(tx, rules.locale, rules.currency),
+      const transformed = {
+        date: isoDate,
+        description: originalTx.description.trim(),
+        amount: parseAmount(originalTx, rules.locale, rules.currency),
       };
 
       // If the file contains balance information, parse that into a number, as
       // well.
-      if (tx.balance) {
-        output.balance = parseCurrencyString(
-          tx.balance,
+      if (originalTx.balance) {
+        transformed.balance = parseCurrencyString(
+          originalTx.balance,
           rules.locale,
-          rules.currency,
+          rules.currency
         );
       }
 
-      return output;
+      return { transformed, original: originalTx };
     })
-    .map((tx) => {
+    .filter((item) => item !== null) // Remove transactions with unparseable dates
+    .map(({ transformed, original }) => {
       // Set the payee equal to the description (for now) and set the accounts
       // to the default defined in the rules
       let output = {
-        ...tx,
-        payee: tx.description,
+        ...transformed,
+        payee: transformed.description,
         account1: rules.account1,
         account2: rules.account2,
       };
@@ -117,14 +133,17 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
       // Loop through the transaction transformers in the rules file
       rules.transformers.forEach((transformer) => {
         // If the tranformer's rule matches...
-        if (jsonLogic.apply(transformer.rule, tx)) {
+        if (jsonLogic.apply(transformer.rule, transformed)) {
           // Merge the transformer's new values with the output
           output = Object.assign(output, transformer.newValues);
         }
       });
 
-      return output;
+      return { transformed: output, original };
     });
+
+  // Extract just the transformed transactions
+  const transformed = transformedWithOriginals.map((item) => item.transformed);
 
   // Build a string containing plaintext transactions. It's a very specific
   // format for use with hledger
@@ -138,12 +157,12 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
     await appendFile(journalFilePath, plaintextTransactions);
 
     // and store the latest transaction that was just imported
-    // Use the last transaction from the filtered list (excluding PENDING)
-    if (filteredTransactions.length > 0) {
-      await writeFile(
-        latestFilePath,
-        JSON.stringify(filteredTransactions[filteredTransactions.length - 1]),
-      );
+    // Use the last successfully transformed transaction's original data
+    // (excluding PENDING and unparseable dates)
+    if (transformedWithOriginals.length > 0) {
+      const lastTransformed =
+        transformedWithOriginals[transformedWithOriginals.length - 1];
+      await writeFile(latestFilePath, JSON.stringify(lastTransformed.original));
     }
   } else {
     // If no journal file was specified, just show the plaintext transactions
@@ -155,12 +174,12 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
 program
   .argument(
     "<transactions file>",
-    "Path to the CSV file containing financial transaction data",
+    "Path to the CSV file containing financial transaction data"
   )
   .argument("<rules file>", "Path to the JSON file containing parsing rules.")
   .argument(
     "[journal file]",
-    "Path to the journal to which the transactions should be appended",
+    "Path to the journal to which the transactions should be appended"
   )
   .action(main)
   .parse();
