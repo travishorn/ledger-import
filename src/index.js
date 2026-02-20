@@ -72,10 +72,13 @@ async function main(txFilePath, rulesFilePath, journalFilePath) {
   const toBeImported =
     latestTxIndex >= 0 ? reversed.slice(latestTxIndex + 1) : reversed;
 
-  // Filter out transactions with "PENDING" dates
-  const filteredTransactions = toBeImported.filter(
-    (tx) => tx.date !== "PENDING",
-  );
+  // Filter out transactions with "PENDING" dates. The CSV previously used
+  // a literal "PENDING" value; newer exports use "PENDING - mm/dd/yyyy",
+  // so detect either form (case-insensitive) and exclude them.
+  const filteredTransactions = toBeImported.filter((tx) => {
+    if (!tx.date || typeof tx.date !== "string") return true;
+    return !tx.date.trim().toUpperCase().startsWith("PENDING");
+  });
 
   const transformed = filteredTransactions
     .map((tx) => {
